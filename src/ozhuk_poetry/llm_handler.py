@@ -21,6 +21,7 @@ class LLMHandler:
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.ollama_url = "http://localhost:11434/api/generate"
         self.primary_model = "gemma-4-31b-it" # Adjusted for genai SDK naming
+        self.light_model = "gemma-4-4b-it"
         self.fallback_model = "gemma4:4b"
 
         self.client = None
