@@ -52,35 +52,41 @@ class LLMHandler:
             logger.error(f"Ollama call failed: {e}")
             raise ConnectionError(f"Local LLM unavailable: {e}")
 
-    def _call_gemini(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def _call_gemini(self, prompt: str, system_prompt: Optional[str] = None, model: Optional[str] = None) -> str:
         """Calls the Gemini API."""
         if not self.client:
             raise ConnectionError("Gemini API key not configured")
 
+        # Use provided model or default to primary
+        model_id = model if model else self.primary_model
+
         # For simple chat, we can use generate_content
-        # In a real app, we'd maintain chat history here or pass it in
         full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
         response = self.client.models.generate_content(
-            model=self.primary_model,
+            model=model_id,
             contents=full_prompt
         )
         return response.text
 
-    def generate(self, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, model_tier: str = "light") -> Dict[str, Any]:
         """
         Generates a response with fallback logic.
+        model_tier: "light" (for chat/routing) or "heavy" (for analysis/critique).
         Returns a dict containing the text and the mode used.
         """
+        # Select model based on tier
+        target_model = self.primary_model if model_tier == "heavy" else self.light_model
+
         # Priority: Cloud -> Local
         try:
             # Try Cloud first
-            text = self._call_gemini(prompt, system_prompt)
+            text = self._call_gemini(prompt, system_prompt, model=target_model)
             self.current_mode = "cloud"
             return {"text": text, "mode": "cloud"}
         except Exception as e:
             logger.warning(f"Primary LLM failed, attempting fallback: {e}")
             try:
-                # Fallback to Local
+                # Fallback to Local (which is always the light version gemma4:4b)
                 text = self._call_ollama(prompt, system_prompt)
                 self.current_mode = "local"
                 return {"text": text, "mode": "local"}
