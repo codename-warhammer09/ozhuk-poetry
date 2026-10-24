@@ -7,9 +7,8 @@
 import os
 import httpx
 from pydantic import BaseModel
-from google import genai
-from google.genai import types
 from PIL import Image
+from .llm_handler import LLMHandler
 
 class OzhukAnalysis(BaseModel):
     title: str
@@ -19,6 +18,9 @@ class OzhukAnalysis(BaseModel):
     hearth_stone_2_development: str # Mechanics & Poetic Devices
     hearth_stone_3_resolution: str  # Scansion, Rhythm & Core Theme
     socratic_challenge: str         # Interactive prompt for the user
+
+# Instantiate the handler globally for the engine
+llm = LLMHandler()
 
 def fetch_poem_excerpt(query: str = "road") -> str:
     """Fetch live poem excerpts from PoetryDB to serve as dynamic examples."""
@@ -39,37 +41,24 @@ def fetch_poem_excerpt(query: str = "road") -> str:
     )
 
 def analyze_poem_with_ozhuk(
-    concept: str, 
-    poem_text: str = "", 
+    concept: str,
+    poem_text: str = "",
     image: Image.Image | None = None
 ) -> OzhukAnalysis:
-    """Sends text or manuscript image to Gemma 4 via the Gemini API using structured JSON output."""
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-    
+    """Sends text or manuscript image to Gemma 4 via the LLMHandler using structured JSON output."""
+
     prompt = f"""
     You are Ozhuk AI, an open-source poetry tutor and scansion engine structured around the three-stone hearth triad (Ozhuk Dazhy).
     Target Literary Concept: {concept}
     Text Excerpt: {poem_text}
-    
+
     Break down the input into the Three Hearth Stones of poetic analysis:
     1. Setup/Exposure: The literal scenario, setting, and sensory imagery.
     2. Development: Key poetic devices, metaphors, and stylistic mechanics.
     3. Resolution: Metrical scansion, rhythm breakdown, and core theme synthesis.
-    
+
     End with a beginner-friendly Socratic exercise or prompt for the user.
     """
-    
-    contents = [prompt]
-    if image:
-        contents.append(image)
-        
-    response = client.models.generate_content(
-        model="gemma-4-31b-it",
-        contents=contents,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=OzhukAnalysis,
-        ),
-    )
-    
-    return OzhukAnalysis.model_validate_json(response.text)
+
+    # Note: LLMHandler.generate_structured currently uses cloud API for Pydantic
+    return llm.generate_structured(prompt, OzhukAnalysis)
