@@ -30,20 +30,26 @@ class LLMHandler:
         self.current_mode = "cloud" # 'cloud' or 'local'
 
     def _call_ollama(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """Calls the local Ollama instance."""
+        """Calls the local Ollama instance using the chat API."""
         try:
+            # Using /api/chat for better compatibility with modern Ollama
+            url = "http://localhost:11434/api/chat"
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
             payload = {
                 "model": self.fallback_model,
-                "prompt": prompt,
-                "stream": False,
-                "system": system_prompt
+                "messages": messages,
+                "stream": False
             }
-            response = httpx.post(self.ollama_url, json=payload, timeout=30.0)
+            response = httpx.post(url, json=payload, timeout=30.0)
             response.raise_for_status()
-            return response.json().get("response", "")
+            return response.json().get("message", {}).get("content", "")
         except Exception as e:
             logger.error(f"Ollama call failed: {e}")
-            raise ConnectionError("Local LLM unavailable")
+            raise ConnectionError(f"Local LLM unavailable: {e}")
 
     def _call_gemini(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Calls the Gemini API."""
@@ -87,6 +93,9 @@ class LLMHandler:
         Currently, structured output is best supported by the Cloud API.
         """
         try:
+            if not self.client:
+                raise ConnectionError("Gemini API key not configured")
+
             # Structured output is a primary feature of the 31B model via genai
             response = self.client.models.generate_content(
                 model=self.primary_model,
