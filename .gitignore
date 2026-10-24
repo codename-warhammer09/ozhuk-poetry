@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.uv/
+.streamlit/secrets.toml
+*.png
+*.jpg
+*.jpeg
+!assets/*.png
