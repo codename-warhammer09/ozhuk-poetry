@@ -6,6 +6,7 @@ import streamlit as st
 from PIL import Image
 from ozhuk_poetry.ozhuk_engine import fetch_poem_excerpt, analyze_poem_with_ozhuk
 from ozhuk_poetry.tutor import PoetryTutor
+from ozhuk_poetry.critic import PoetryCritic
 from dotenv import load_dotenv
 import os
 
@@ -13,9 +14,12 @@ load_dotenv()
 
 st.set_page_config(page_title="Ozhuk AI — Your Poetry Tutor", layout="wide")
 
-# Initialize Tutor and Session State
+# Initialize Tutor, Critic, and Session State
 if "tutor" not in st.session_state:
     st.session_state.tutor = PoetryTutor()
+
+if "critic" not in st.session_state:
+    st.session_state.critic = PoetryCritic()
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -23,6 +27,7 @@ if "messages" not in st.session_state:
     ]
 
 tutor = st.session_state.tutor
+critic = st.session_state.critic
 
 # --- Sidebar: Curriculum Map ---
 with st.sidebar:
@@ -67,29 +72,62 @@ if prompt := st.chat_input("Your response or poetry..."):
             # Determine the current tutoring goal
             milestone = tutor.get_current_milestone()
 
-            if milestone:
-                # Socratic Loop
-                if "example" in prompt.lower() or "start" in prompt.lower():
+            if not milestone:
+                response = "You have mastered the Three-Stone Hearth! You are now a Master of the Breath."
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+            else:
+                # --- DYNAMIC INTENT DETECTION ---
+                # We use the LLM to decide if the user wants to:
+                # 1. Learn (get an example/explanation)
+                # 2. Submit (get a critique)
+                # 3. Chat (general question)
+
+                intent_prompt = (
+                    f"Analyze the user's input and categorize it into one of these intents:\n"
+                    f"LEARN: User wants an example, explanation, or to start learning about {milestone.name}.\n"
+                    f"SUBMIT: User is providing a poem for critique or explicitly asking for a review.\n"
+                    f"CHAT: User is asking a general question, greeting, or discussing poetry.\n\n"
+                    f"User Input: '{prompt}'\n\n"
+                    f"Respond with ONLY the word LEARN, SUBMIT, or CHAT."
+                )
+
+                intent_res = critic.llm.generate(intent_prompt)
+                intent = intent_res["text"].strip().upper()
+
+                if "LEARN" in intent:
                     poem_text = fetch_poem_excerpt("nature")
                     analysis = analyze_poem_with_ozhuk(concept=milestone.name, poem_text=poem_text)
 
-                    response = f"Let's look at an example for **{milestone.name}**:\n\n"
+                    response = f"### Teaching: {milestone.name}\n\n"
+                    response += f"To understand {milestone.name}, let's examine this excerpt:\n\n"
                     response += f"```{poem_text}```\n\n"
-                    response += f"**Exposure:** {analysis.hearth_stone_1_setup}\n\n"
-                    response += f"**Mechanics:** {analysis.hearth_stone_2_development}\n\n"
-                    response += f"**Scansion:** {analysis.hearth_stone_3_resolution}\n\n"
-                    response += f"**Challenge:** {analysis.socratic_challenge}"
-                else:
-                    response = f"I've noted your response regarding {milestone.name}. To advance, try to apply this to a short poem of your own."
+                    response += f"**Exposure (Stone 1):** {analysis.hearth_stone_1_setup}\n\n"
+                    response += f"**Mechanics (Stone 2):** {analysis.hearth_stone_2_development}\n\n"
+                    response += f"**Scansion (Stone 3):** {analysis.hearth_stone_3_resolution}\n\n"
+                    response += f"**Your Challenge:** {analysis.socratic_challenge}"
 
-                    if "correct" in prompt.lower() or "poem" in prompt.lower():
-                        tutor.mark_milestone_complete(milestone.id)
-                        response += "\n\n✨ **Milestone Complete!** You've progressed further on the Ozhuk path."
-            else:
-                response = "You have mastered the Three-Stone Hearth! You are now a Master of the Breath."
+                elif "SUBMIT" in intent:
+                    with st.spinner("Criticizing your work..."):
+                        critique_res = critic.critique_poem(
+                            poem=prompt,
+                            milestone_name=milestone.name,
+                            stage_name=current_stage.name
+                        )
 
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+                        response = f"### 🖋️ Ozhuk's Critique\n\n{critique_res['critique']}"
+
+                        if "Pass" in critique_res['critique']:
+                            tutor.mark_milestone_complete(milestone.id)
+                            response += "\n\n✨ **Milestone Complete!** You have advanced on the Ozhuk path."
+
+                else: # CHAT
+                    sys_prompt = f"You are Ozhuk, a poetry tutor. The student is currently learning {milestone.name} in {current_stage.name}. Be encouraging and Socratic."
+                    res = critic.llm.generate(prompt, system_prompt=sys_prompt)
+                    response = res["text"]
+
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
 
 # Multimodal Upload
 st.markdown("---")
