@@ -4,7 +4,7 @@
 
 import streamlit as st
 from PIL import Image
-from ozhuk_engine import fetch_poem_excerpt, analyze_poem_with_ozhuk
+from ozhuk_poetry.ozhuk_engine import fetch_poem_excerpt, analyze_poem_with_ozhuk
 from ozhuk_poetry.tutor import PoetryTutor
 from dotenv import load_dotenv
 import os
