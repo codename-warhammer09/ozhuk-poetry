@@ -1,7 +1,15 @@
 import json
 import os
+import time
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
+
+class PortfolioEntry(BaseModel):
+    milestone_id: str
+    milestone_name: str
+    poem: str
+    critique: str
+    timestamp: float = Field(default_factory=time.time)
 
 class Milestone(BaseModel):
     id: str
@@ -20,15 +28,17 @@ class UserProfile(BaseModel):
     current_stage_id: int = 1
     completed_milestones: List[str] = []
     total_poems_written: int = 0
+    portfolio: List[PortfolioEntry] = []
 
 class PoetryTutor:
     """
-    Manages the 3-stage curriculum, user progress, and Socratic loops.
+    Manages the 3-stage curriculum, user progress, and portfolio tracking.
     """
     def __init__(self, profile_path: str = "user_profile.json"):
         self.profile_path = profile_path
         self.profile = self._load_profile()
         self.curriculum = self._init_curriculum()
+        self._sync_profile_to_curriculum()
 
     def _init_curriculum(self) -> Dict[int, Stage]:
         """Defines the 3-stage Ozhuk path."""
@@ -53,19 +63,33 @@ class PoetryTutor:
     def _load_profile(self) -> UserProfile:
         if os.path.exists(self.profile_path):
             try:
-                with open(self.profile_path, "r") as f:
+                with open(self.profile_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return UserProfile(**data)
             except Exception:
                 return UserProfile()
         return UserProfile()
 
+    def _sync_profile_to_curriculum(self):
+        """Populates in-memory curriculum status and portfolio items from persistent profile."""
+        for stage in self.curriculum.values():
+            for m in stage.milestones:
+                if m.id in self.profile.completed_milestones:
+                    m.completed = True
+                m_entries = [
+                    {"poem": e.poem, "critique": e.critique}
+                    for e in self.profile.portfolio
+                    if e.milestone_id == m.id
+                ]
+                m.portfolio_poems = m_entries
+                m.portfolio_count = len(m_entries)
+
     def save_profile(self):
-        with open(self.profile_path, "w") as f:
+        with open(self.profile_path, "w", encoding="utf-8") as f:
             f.write(self.profile.model_dump_json(indent=4))
 
     def get_current_stage(self) -> Stage:
-        return self.curriculum[self.profile.current_stage_id]
+        return self.curriculum.get(self.profile.current_stage_id, self.curriculum[1])
 
     def get_current_milestone(self) -> Optional[Milestone]:
         stage = self.get_current_stage()
@@ -78,21 +102,37 @@ class PoetryTutor:
         if milestone_id not in self.profile.completed_milestones:
             self.profile.completed_milestones.append(milestone_id)
 
-            # Check if stage is complete to advance
-            stage = self.get_current_stage()
-            if all(m.id in self.profile.completed_milestones for m in stage.milestones):
+            # Update milestone object
+            for stage in self.curriculum.values():
+                for m in stage.milestones:
+                    if m.id == milestone_id:
+                        m.completed = True
+
+            # Advance stage if all milestones in current stage are complete
+            current_stage = self.get_current_stage()
+            if all(m.id in self.profile.completed_milestones for m in current_stage.milestones):
                 if self.profile.current_stage_id < 3:
                     self.profile.current_stage_id += 1
 
             self.save_profile()
 
     def add_portfolio_poem(self, milestone_id: str, poem: str, critique: str):
-        """Adds a poem to the specific milestone portfolio."""
-        stage = self.get_current_stage()
-        for m in stage.milestones:
-            if m.id == milestone_id:
-                m.portfolio_poems.append({"poem": poem, "critique": critique})
-                m.portfolio_count += 1
-                break
+        """Adds a poem to the specific milestone portfolio and persists to profile."""
+        milestone_name = milestone_id
+        for stage in self.curriculum.values():
+            for m in stage.milestones:
+                if m.id == milestone_id:
+                    milestone_name = m.name
+                    m.portfolio_poems.append({"poem": poem, "critique": critique})
+                    m.portfolio_count += 1
+                    break
+
+        entry = PortfolioEntry(
+            milestone_id=milestone_id,
+            milestone_name=milestone_name,
+            poem=poem,
+            critique=critique,
+        )
+        self.profile.portfolio.append(entry)
         self.profile.total_poems_written += 1
         self.save_profile()

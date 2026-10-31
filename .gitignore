@@ -9,23 +9,7 @@
 token.json
 
 # ==========================================
-# 2. Claude Code, Agent Memory & Skills
-# ==========================================
-# Local Claude configurations & caches
-.claude/settings.local.json
-.claude/history/
-.claude/transcripts/
-.claude/hooks/*.local.sh
-.claude.json
-
-# Allow shared skill definitions and project rules to be tracked
-!.claude/skills/
-!.claude/settings.json
-!CLAUDE.md
-!SKILLS.md
-
-# ==========================================
-# 3. Python & uv Environments
+# 2. Python & uv Environments
 # ==========================================
 __pycache__/
 *.py[cod]
@@ -56,16 +40,17 @@ venv/
 ENV/
 
 # ==========================================
-# 4. Streamlit & Web Caches
+# 3. Streamlit & User State
 # ==========================================
 .streamlit/secrets.toml
 .streamlit/config.toml
 *.log
+user_profile.json
+test_*.json
 
 # ==========================================
-# 5. Local Vector DBs & Temporary Assets
+# 4. Local Vector DBs & Temporary Assets
 # ==========================================
-# Local ChromaDB, FAISS indices, or scraped caches
 .chroma/
 *.faiss
 *.pkl
@@ -73,18 +58,13 @@ cache/
 tmp/
 temp/
 
-# User uploads/test images (avoid bloating git)
-uploads/*
-!uploads/.gitkeep
-
 # ==========================================
-# 6. IDEs & OS Files
+# 5. IDEs & OS Files
 # ==========================================
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/*
 !.vscode/settings.json
-!.vscode/tasks.json
 *.swp
 *~
